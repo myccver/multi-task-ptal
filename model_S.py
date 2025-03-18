@@ -6,20 +6,6 @@ import utils
 import os
 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
-# class FramePrediction(nn.Module):
-#     def __init__(self, feature_dim=2048):
-#         super(FramePrediction, self).__init__()
-#         self.fc1 = nn.Linear(feature_dim * 4, feature_dim)
-#         # self.fc2 = nn.Linear(feature_dim, feature_dim)
-#
-#     def forward(self, left_feature, right_feature):
-#         x = torch.cat((left_feature, right_feature), dim=1)
-#         x = F.relu(self.fc1(x))  # 第一层全连接 + ReLU
-#         # x = self.fc2(x)  # 第二层全连接
-#         # x1 = self.fc2(left_feature)
-#         # x2 = self.fc2(right_feature)
-#         # x=(x1+x2)/2
-#         return x
 
 
 class FramePrediction(nn.Module):
@@ -37,15 +23,15 @@ class FramePrediction(nn.Module):
 class SequenceOrderPrediction(nn.Module):
     def __init__(self, feature_dim=2048):
         super().__init__()
-        self.fc1 = nn.Linear(feature_dim * 3, 1)
+        self.fc1 = nn.Linear(feature_dim * 5, feature_dim)
         # self.dropout  = nn.Dropout(0.5)
-        #self.fc2 = nn.Linear(feature_dim, 1)
+        self.fc2 = nn.Linear(feature_dim, 1)
 
     def forward(self, feature_sequence):
         # 输入: [batch_size, 3*feature_dim]
         # 输出: [batch_size, 1]
-        x = torch.sigmoid(F.relu(self.fc1(feature_sequence)))
-        #x = torch.sigmoid(self.fc2(x))
+        x = F.relu(self.fc1(feature_sequence))
+        x = torch.sigmoid(self.fc2(x))
         return x
 
 # 重建网络
@@ -57,19 +43,35 @@ class FrameAutoencoder(nn.Module):
             nn.Linear(feat_dim, latent_dim),
             #nn.LayerNorm(1024),
             nn.ReLU(),
-            # nn.Linear(1024, latent_dim)
+            nn.Linear(latent_dim, latent_dim)
         )
 
         self.decoder = nn.Sequential(
-            # nn.Linear(latent_dim, 1024),
-            # #nn.LayerNorm(1024),
-            # nn.ReLU(),
+            # nn.Linear(latent_dim, latent_dim),
+            #nn.LayerNorm(1024),
+            nn.ReLU(),
             nn.Linear(latent_dim, feat_dim)
         )
 
     def forward(self, x):
         latent = self.encoder(x)
         return self.decoder(latent)
+
+# 定义顺序扰动预测网络
+class SequenceShufflePrediction(nn.Module):
+    def __init__(self, feature_dim=2048):
+        super().__init__()
+        self.fc1 = nn.Linear(feature_dim * 5, feature_dim)
+        # self.dropout  = nn.Dropout(0.5)
+        self.fc2 = nn.Linear(feature_dim, 1)
+
+    def forward(self, feature_sequence):
+        # 输入: [batch_size, 3*feature_dim]
+        # 输出: [batch_size, 1]
+        x = F.relu(self.fc1(feature_sequence))
+        x = torch.sigmoid(self.fc2(x))
+        return x
+
 
 
 
@@ -254,7 +256,9 @@ class Encoder(nn.Module):
         ])
 
         self.feature_embedding = nn.Sequential(
-            nn.Conv1d(in_channels=self.feature_dim, out_channels=self.feature_dim, kernel_size=3, stride=1, padding=1),
+            # nn.Conv1d(in_channels=self.feature_dim, out_channels=self.feature_dim, kernel_size=3, stride=1, padding=1),
+            # nn.ReLU(),
+            nn.Conv1d(in_channels=self.feature_dim, out_channels=self.feature_dim, kernel_size=5, stride=1, padding=2),
             nn.ReLU(),
         )
 
@@ -295,34 +299,37 @@ class S_Model(nn.Module):
         self.sigmoid = nn.Sigmoid()
         self.bce_criterion = nn.BCELoss(reduction='none')
         self.lambdas = args.lambdas
-        #
-        # self.frame_predictor = FramePrediction(args.feature_dim)
+
         self.args = args
-        if self.args.mtl and self.args.mtl_task == 'pred':
+        if self.args.mtl:
+            args.feature_dim = args.feature_dim
             self.frame_predictor = FramePrediction(args.feature_dim)
-            self.sequenceorder_predictor = SequenceOrderPrediction()
-            self.frame_autoencoder = FrameAutoencoder()
-            self.adapter = nn.Sequential(nn.Linear(args.feature_dim, args.feature_dim),
+            self.sequenceorder_predictor = SequenceOrderPrediction(args.feature_dim)
+            # self.frame_autoencoder = FrameAutoencoder(args.feature_dim, latent_dim=args.feature_dim)
+            self.shuffle_predictor = SequenceShufflePrediction(args.feature_dim)
+            self.adapter = nn.Sequential(nn.Linear(args.feature_dim , args.feature_dim),
                                          nn.ReLU(),
                                          # nn.Dropout(0.5),
                                          nn.Linear(args.feature_dim, args.feature_dim),
-                                         nn.ReLU(),
-                                         # nn.Dropout(0.5),
-                                         nn.Linear(args.feature_dim, args.feature_dim),
+                                         # nn.ReLU(),
+                                         # # nn.Dropout(0.5),
+                                         # nn.Linear(args.feature_dim, args.feature_dim),
                                          )  # 更深的特征变换
 
             # 门控网络
             self.gate = nn.Sequential(
-                nn.Linear(args.feature_dim, 512),
+                nn.Linear(args.feature_dim, 3),
                 nn.ReLU(),
-                nn.Linear(512, 3),
+                # nn.Linear(128, 3),
                 nn.Softmax(dim=-1)
             )
         
 
     def extract_feature(self, input_features):
         embeded_feature = self.encoder(input_features, self.memory.proto_vectors)
-        return embeded_feature.squeeze(0).transpose(0,1)
+        adapted_features = self.adapter(embeded_feature.transpose(-1, -2)).transpose(-1, -2)
+        # return embeded_feature.squeeze(0).transpose(0,1)
+        return adapted_features.squeeze(0).transpose(0, 1)
 
     def forward(self, input_features, vid_labels=None, point_labels=None):
         '''
@@ -353,7 +360,7 @@ class S_Model(nn.Module):
             vid_score = (torch.mean(topk_scores, dim=1) * vid_labels) + \
                         (torch.mean(cas_S, dim=1) * (1 - vid_labels))
         #--------------------
-        # if self.args.mtl and self.args.mtl_task=='pred':
+        # if self.args.mtl:
         #     if point_labels is None:
         #         predicted_tensors = None
         #         target_tensors = None
@@ -429,21 +436,24 @@ class S_Model(nn.Module):
         #         sequence_labels = sequence_labels,
         #
         #     )
-        if self.args.mtl and self.args.mtl_task == 'pred':
-            B, F, T = embeded_feature.shape  # 输入形状 [1, 2048, T]
-            device = embeded_feature.device
+        if self.args.mtl:
+
+
 
             adapted_features = self.adapter(embeded_feature.transpose(-1,-2)).transpose(-1,-2)
+            B, F, T = adapted_features.shape  # 输入形状 [1, 2048, T]
+            device = adapted_features.device
             gate_weights = self.gate(adapted_features.transpose(-1,-2)).transpose(-1,-2)
 
             frame_predict_weight = gate_weights[:, 0, :].unsqueeze(1)  # [1,1,265]
             sequence_weight = gate_weights[:, 1, :].unsqueeze(1)  # [B, 1, L]
-            autoencoder_weight = gate_weights[:, 2, :].unsqueeze(1)
+            # autoencoder_weight = gate_weights[:, 2, :].unsqueeze(1)
+            shuffle_weight = gate_weights[:, 2, :].unsqueeze(1)
 
             frame_predict_feature = frame_predict_weight * adapted_features
             sequence_feature = sequence_weight * adapted_features
-            autoencoder_feature = autoencoder_weight * adapted_features
-
+            # autoencoder_feature = autoencoder_weight * adapted_features
+            shuffle_feature = shuffle_weight * adapted_features
 
 
             # ===== 初始化所有返回值 =====
@@ -453,6 +463,9 @@ class S_Model(nn.Module):
             sequence_labels = None
             labeled_features = None
             reconstructions = None
+            shuffle_predictions = None
+            shuffle_labels = None
+
 
             # ================= 特征预测任务（维度修正） =================
             if point_labels is not None:
@@ -482,47 +495,30 @@ class S_Model(nn.Module):
                     predicted_tensors = self.frame_predictor(combined)  # [N, 2048]
                     # target_tensors = embeded_feature[0, :, valid_indices].t()  # [N, 2048]
                     target_tensors = frame_predict_feature[0, :, valid_indices].t()  # [N, 2048]
+                    # target_tensors = input_features.transpose(-1,-2)[0, :, valid_indices].t()  # [N, 2048]
 
             # ================= 序列顺序预测（维度修正） =================
-            if point_labels is not None:
-                # triplet_windows = embeded_feature.unfold(2, 3, 1)  # [1, F, T-2, 3]
-                triplet_windows = sequence_feature.unfold(2, 3, 1)  # [1, F, T-2, 3]
-                valid_mask = (point_labels[0, 1:T - 1, :].sum(dim=1) >= 1)
-                valid_windows = triplet_windows[:, :, valid_mask, :]  # [1, F, N, 3]
-
-                if valid_windows.numel() > 0:
-                    # 保持批量维度
-                    reverse_mask = torch.rand(valid_windows.size(2), device=device) < 0.5  # [N]
-                    reversed_windows = valid_windows.clone()
-                    reversed_windows[:, :, reverse_mask, :] = reversed_windows[:, :, reverse_mask, :].flip(dims=[3])
-
-                    # 调整维度（支持批量输入）
-                    combined = reversed_windows.permute(0, 2, 3, 1).reshape(-1, 3 * F)  # [N, 3 * 2048]
-                    sequence_predictions = self.sequenceorder_predictor(combined)  # [N, 1]
-                    sequence_labels = (~reverse_mask).float().to(device)  # [N]
-            #------------------重建-------------------------------
-            if point_labels is not None:
-                # 提取被标注的帧特征 [batch, features, time]
-                # 假设 point_labels 形状为 [batch, time, num_classes]
-                labeled_mask = (point_labels.sum(dim=-1) > 0)  # [batch, time]
-
-                # 获取有效特征 (仅处理有标注的帧)
-                # labeled_features = embeded_feature[:, :, labeled_mask[0]]  # [1, F, N]
-                labeled_features = autoencoder_feature[:, :, labeled_mask[0]]  # [1, F, N]
-
-                if labeled_features.size(2) > 0:
-                    # 转置为 [N, F] 作为自编码器输入
-                    labeled_features = labeled_features.permute(2, 1, 0).squeeze(-1)  # [N, F]
-
-                    # 自编码重建（输入=输出）
-                    reconstructions = self.frame_autoencoder(labeled_features)  # [N, F]
-
-
-
+            # if point_labels is not None:
+            #     # triplet_windows = embeded_feature.unfold(2, 3, 1)  # [1, F, T-2, 3]
+            #     triplet_windows = sequence_feature.unfold(2, 3, 1)  # [1, F, T-2, 3]
+            #     valid_mask = (point_labels[0, 1:T - 1, :].sum(dim=1) >= 1)
+            #     valid_windows = triplet_windows[:, :, valid_mask, :]  # [1, F, N, 3]
+            #
+            #     if valid_windows.numel() > 0:
+            #         # 保持批量维度
+            #         reverse_mask = torch.rand(valid_windows.size(2), device=device) < 0.5  # [N]
+            #         reversed_windows = valid_windows.clone()
+            #         reversed_windows[:, :, reverse_mask, :] = reversed_windows[:, :, reverse_mask, :].flip(dims=[3])
+            #
+            #         # 调整维度（支持批量输入）
+            #         combined = reversed_windows.permute(0, 2, 3, 1).reshape(-1, 3 * F)  # [N, 3 * 2048]
+            #         sequence_predictions = self.sequenceorder_predictor(combined)  # [N, 1]
+            #         sequence_labels = (~reverse_mask).float().to(device)  # [N]
 
             # if point_labels is not None:
             #     # 生成三元组窗口 [batch, features, num_windows, window_size]
-            #     triplet_windows = embeded_feature.unfold(2, 3, 1)  # [1, F, T-2, 3]
+            #     # triplet_windows = embeded_feature.unfold(2, 3, 1)  # [1, F, T-2, 3]
+            #     triplet_windows = sequence_feature.unfold(2, 3, 1)  # [1, F, T-2, 3]
             #
             #     # 选择有效中心帧 (对应窗口索引范围验证)
             #     valid_center_mask = (point_labels[0, 1:T - 1, :].sum(dim=1) >= 1)  # [T-2]
@@ -549,6 +545,108 @@ class S_Model(nn.Module):
             #         # 进行预测
             #         sequence_predictions = self.sequenceorder_predictor(combined)  # [2*N, 1]
 
+            if point_labels is not None:
+                # 生成五元组窗口 [batch, features, num_windows, window_size]
+                quintuplet_windows = sequence_feature.unfold(2, 5, 1)  # [1, F, T-4, 5]
+
+                # 选择有效中心帧 (窗口中心索引为2，对应原始序列的2:T-2)
+                valid_center_mask = (point_labels[0, 2:T - 2, :].sum(dim=1) >= 1)  # [T-4]
+                valid_windows = quintuplet_windows[:, :, valid_center_mask, :]  # [1, F, N, 5]
+
+                if valid_windows.numel() > 0:
+                    # 生成正序和反序配对数据
+                    original_windows = valid_windows
+                    reversed_windows = valid_windows.flip(dims=[-1])  # 反转窗口顺序
+
+                    # 合并正反样本 [1, F, 2*N, 5]
+                    combined_windows = torch.cat([original_windows, reversed_windows], dim=2)
+
+                    # 调整维度结构 [2*N, 5*F]
+                    batch_size, num_features, num_windows, window_size = combined_windows.shape
+                    combined = combined_windows.permute(0, 2, 3, 1).reshape(-1, window_size * num_features)
+
+                    # 生成配对标签 (直接使用原始有效窗口数N)
+                    N = valid_windows.size(2)  # 从valid_windows直接获取
+                    sequence_labels = torch.cat([
+                        torch.ones(N, device=device),  # 原顺序标签为1
+                        torch.zeros(N, device=device)  # 反序标签为0
+                    ]).float()
+
+                    # 进行预测
+                    sequence_predictions = self.sequenceorder_predictor(combined)  # [2*N, 1]
+
+            # #------------------重建-------------------------------
+            # if point_labels is not None:
+            #     # 提取被标注的帧特征 [batch, features, time]
+            #     # 假设 point_labels 形状为 [batch, time, num_classes]
+            #     labeled_mask = (point_labels.sum(dim=-1) > 0)  # [batch, time]
+            #
+            #     # 获取有效特征 (仅处理有标注的帧)
+            #     # labeled_features = embeded_feature[:, :, labeled_mask[0]]  # [1, F, N]
+            #     labeled_features = autoencoder_feature[:, :, labeled_mask[0]]  # [1, F, N]
+            #
+            #     if labeled_features.size(2) > 0:
+            #         # 转置为 [N, F] 作为自编码器输入
+            #         labeled_features = labeled_features.permute(2, 1, 0).squeeze(-1)  # [N, F]
+            #
+            #         # 自编码重建（输入=输出）
+            #         reconstructions = self.frame_autoencoder(labeled_features)  # [N, F]
+
+             #--------------------乱序--------------------
+            if point_labels is not None:
+                # 生成五元组窗口 [batch, features, num_windows, window_size]
+                quintuplet_windows = shuffle_feature.unfold(2, 5, 1)  # [1, F, T-4, 5]
+
+                # 选择有效中心帧 (中间帧索引为2)
+                valid_center_mask = (point_labels[0, 2:T - 2, :].sum(dim=1) >= 1)  # [T-4]
+                valid_windows = quintuplet_windows[:, :, valid_center_mask, :]  # [1, F, N, 5]
+
+                if valid_windows.numel() > 0:
+                    # 正序样本：保持原窗口 [1, F, N, 5]
+                    original_windows = valid_windows
+
+                    # 乱序样本：中间帧固定，周围四帧随机打乱
+                    shuffled_windows = []
+                    for i in range(valid_windows.size(2)):
+                        # 保持四维结构 [1, F, 1, 5]
+                        window = valid_windows[:, :, i:i + 1, :]  # 关键修改：i:i+1 保留维度
+
+                        # 提取周围四帧（索引0,1,3,4）并打乱顺序
+                        surrounding_indices = torch.tensor([0, 1, 3, 4], device=device)
+                        shuffled_idx = torch.randperm(4)  # 生成随机排列
+                        new_surrounding = window[:, :, :, surrounding_indices[shuffled_idx]]  # [1, F, 1, 4]
+
+                        # 重组窗口：打乱的周围四帧 + 中间帧 [1, F, 1, 5]
+                        shuffled_window = torch.cat([
+                            new_surrounding[:, :, :, :2],  # 前两帧
+                            window[:, :, :, 2:3],  # 中间帧（保持原位）
+                            new_surrounding[:, :, :, 2:]  # 后两帧
+                        ], dim=3)  # 关键修改：dim=3（时间步维度）
+
+                        shuffled_windows.append(shuffled_window)
+
+                    # 合并乱序样本 [1, F, N, 5]
+                    shuffled_windows = torch.cat(shuffled_windows, dim=2)  # dim=2 合并窗口数量
+
+                    # 合并正序和乱序样本 [1, F, 2N, 5]
+                    combined_windows = torch.cat([original_windows, shuffled_windows], dim=2)
+
+                    # 调整维度结构 [2N, 5*F]
+                    batch_size, num_features, num_windows, window_size = combined_windows.shape
+                    combined = combined_windows.permute(0, 2, 3, 1).reshape(-1, window_size * num_features)
+
+                    # 生成标签：前N为1（正序），后N为0（乱序）
+                    N = valid_windows.size(2)
+                    shuffle_labels = torch.cat([
+                        torch.ones(N, device=device),  # 正序标签1
+                        torch.zeros(N, device=device)  # 乱序标签0
+                    ]).float()
+
+                    # 进行预测
+                    shuffle_predictions = self.shuffle_predictor(combined)  # [2N, 1]
+
+
+
             return {
                 "cas_fuse": cas_fuse,
                 "cas_S": cas_S,
@@ -558,8 +656,10 @@ class S_Model(nn.Module):
                 "target_tensors": target_tensors,
                 "sequence_predictions": sequence_predictions,
                 "sequence_labels": sequence_labels,
-                'labeled_features': labeled_features,
-                'reconstructions': reconstructions,
+                # 'labeled_features': labeled_features,
+                # 'reconstructions': reconstructions,
+                'shuffle_predictions': shuffle_predictions,
+                'shuffle_labels': shuffle_labels,
 
             }
         else:
@@ -597,19 +697,33 @@ class S_Model(nn.Module):
         # loss_dict["loss_triplet"] = loss_triplet
 
         # predict_loss
-        if self.args.mtl and self.args.mtl_task=='pred':
+        if self.args.mtl:
+            # >> base loss
+            loss_vid, loss_frame, loss_frame_bkg = self.base_loss_func(args, act_seed, bkg_seed, vid_score, vid_label,
+                                                                       cas_fuse, point_label)
+            loss_dict["loss_vid"] = loss_vid
+            loss_dict["loss_frame"] = loss_frame
+            loss_dict["loss_frame_bkg"] = loss_frame_bkg
+
+            # >> feat loss
+            loss_contrastive = self.feat_loss_func(args, embeded_feature, act_seed, bkg_seed, vid_label)
+            loss_dict["loss_contrastive"] = loss_contrastive
             loss_predict = self.prediction_loss(args, outputs['predicted_tensors'], outputs['target_tensors'])
             loss_dict["loss_predict"] = loss_predict
             loss_sequence_order = self.sequence_order_loss(args,outputs['sequence_predictions'], outputs['sequence_labels'])
             loss_dict['loss_sequence_order'] = loss_sequence_order
-            loss_reconstructions = self.reconstruction_loss(args,outputs['labeled_features'], outputs['reconstructions'])
-            loss_dict['reconstructions'] = loss_reconstructions
+            # loss_reconstructions = self.reconstruction_loss(args,outputs['labeled_features'], outputs['reconstructions'])
+            # loss_dict['loss_reconstructions'] = loss_reconstructions
+            loss_shuffle = self.sequence_shuffle_loss(args, outputs['shuffle_predictions'], outputs['shuffle_labels'])
+            loss_dict['loss_shuffle'] = loss_shuffle
 
         # >> update memory
         self.memory.update(args, embeded_feature.detach(), act_seed, vid_label)
 
-        if self.args.mtl and self.args.mtl_task=='pred':
-            loss_total =  1 * loss_predict + 1 * loss_sequence_order + 1 * loss_reconstructions # + 0.5 * loss_triplet
+        if self.args.mtl:
+            loss_total = self.lambdas[0] * loss_vid + self.lambdas[1] * loss_frame \
+                         + self.lambdas[2] * loss_frame_bkg + self.lambdas[
+                             3] * loss_contrastive+ 0.5 * loss_predict + 0.5 * loss_sequence_order  + 0.5 *  loss_shuffle #+ 0 * loss_reconstructions # + 0.5 * loss_triplet
         else:
             loss_total = self.lambdas[0] * loss_vid + self.lambdas[1] * loss_frame \
                          + self.lambdas[2] * loss_frame_bkg + self.lambdas[
@@ -891,7 +1005,19 @@ class S_Model(nn.Module):
         Returns:
             loss: L1损失标量
         """
-        return F.mse_loss(predicted, target, reduction='mean')
+        # return F.mse_loss(predicted, target, reduction='mean')
+        return 1 - F.cosine_similarity(predicted, target, dim=1).mean()
+
+    def sequence_shuffle_loss(self,args, predicted, target):
+        """
+        顺序分类的损失函数，用于二分类任务。
+        `predicted`：模型输出的预测概率（经过 sigmoid 的输出）。
+        `target`：真实标签（1 表示顺序正确，0 表示反转顺序）。
+        """
+        # 确保 target 的形状与 predicted 一致
+        target = target.view(-1, 1).float()  # 转换为 [N, 1] 的形状
+        # 使用二元交叉熵损失（BCELoss）
+        return F.binary_cross_entropy(predicted, target, reduction='mean')  # 计算交叉熵损失
 
 
 

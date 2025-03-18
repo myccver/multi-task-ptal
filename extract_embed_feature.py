@@ -55,39 +55,6 @@ def main(args):
         origin_dir = '/home/yunchuan/HR-Pro/dataset/THUMOS14/features/origin_train'
         embed_dir = '/home/yunchuan/HR-Pro/dataset/THUMOS14/features/embed_train'
         fused_dir = '/home/yunchuan/HR-Pro/dataset/THUMOS14/features/fused_train'
-        #
-        # # 如果 fused_train 文件夹不存在，则创建
-        # if not os.path.exists(fused_dir):
-        #     os.makedirs(fused_dir)
-        #
-        # # 遍历 origin_train 文件夹下的所有文件（假设均为 .npy 文件）
-        # for file_name in os.listdir(origin_dir):
-        #     # 构造完整的文件路径
-        #     origin_file = os.path.join(origin_dir, file_name)
-        #     embed_file = os.path.join(embed_dir, file_name)
-        #
-        #     # 检查 embed_train 文件夹中是否存在对应的文件
-        #     if not os.path.exists(embed_file):
-        #         print(f"Warning: {embed_file} 文件不存在，跳过。")
-        #         continue
-        #
-        #     # 加载两个数组
-        #     arr_origin = np.load(origin_file)
-        #     arr_embed = np.load(embed_file)
-        #
-        #     # 检查两个数组维度是否一致
-        #     if arr_origin.shape[0] != arr_embed.shape[0]:
-        #         print(f"Warning: 文件 {file_name} 两个数组在第一个维度上的长度不一致，跳过。")
-        #         continue
-        #
-        #     # 在第二个维度上拼接数组，得到形状 (T, 2D)
-        #     fused_arr = np.concatenate([arr_origin, arr_embed], axis=1)
-        #
-        #     # 保存拼接后的数组到 fused_train 文件夹下，文件名保持一致
-        #     fused_file = os.path.join(fused_dir, file_name)
-        #     np.save(fused_file, fused_arr)
-        #
-        #     print(f"已处理并保存: {file_name}")
 
         # 如果 fused_train 文件夹不存在，则创建
         if not os.path.exists(fused_dir):
@@ -95,6 +62,7 @@ def main(args):
 
         # 遍历 origin_train 文件夹下的所有文件（假设均为 .npy 文件）
         for file_name in os.listdir(origin_dir):
+            # 构造完整的文件路径
             origin_file = os.path.join(origin_dir, file_name)
             embed_file = os.path.join(embed_dir, file_name)
 
@@ -107,58 +75,57 @@ def main(args):
             arr_origin = np.load(origin_file)
             arr_embed = np.load(embed_file)
 
-            # 检查两个数组是否形状一致
-            if arr_origin.shape != arr_embed.shape:
-                print(f"Warning: 文件 {file_name} 的两个数组形状不同，跳过。")
+            # 检查两个数组维度是否一致
+            if arr_origin.shape[0] != arr_embed.shape[0]:
+                print(f"Warning: 文件 {file_name} 两个数组在第一个维度上的长度不一致，跳过。")
                 continue
 
-            # 计算元素级平均值，结果形状依然为 (T, D)
-            # fused_arr = (arr_origin + arr_embed) / 2.0
-            fused_arr = (arr_origin + arr_embed * 0.1)
+            # 在第二个维度上拼接数组，得到形状 (T, 2D)
+            fused_arr = np.concatenate([arr_origin, arr_embed], axis=1)
 
-            # 保存结果到 fused_train 文件夹下，文件名保持一致
+            # 保存拼接后的数组到 fused_train 文件夹下，文件名保持一致
             fused_file = os.path.join(fused_dir, file_name)
             np.save(fused_file, fused_arr)
 
             print(f"已处理并保存: {file_name}")
+
+        # # 如果 fused_train 文件夹不存在，则创建
+        # if not os.path.exists(fused_dir):
+        #     os.makedirs(fused_dir)
+        #
+        # # 遍历 origin_train 文件夹下的所有文件（假设均为 .npy 文件）
+        # for file_name in os.listdir(origin_dir):
+        #     origin_file = os.path.join(origin_dir, file_name)
+        #     embed_file = os.path.join(embed_dir, file_name)
+        #
+        #     # 检查 embed_train 文件夹中是否存在对应的文件
+        #     if not os.path.exists(embed_file):
+        #         print(f"Warning: {embed_file} 文件不存在，跳过。")
+        #         continue
+        #
+        #     # 加载两个数组
+        #     arr_origin = np.load(origin_file)
+        #     arr_embed = np.load(embed_file)
+        #
+        #     # 检查两个数组是否形状一致
+        #     if arr_origin.shape != arr_embed.shape:
+        #         print(f"Warning: 文件 {file_name} 的两个数组形状不同，跳过。")
+        #         continue
+        #
+        #     # 计算元素级平均值，结果形状依然为 (T, D)
+        #     # fused_arr = (arr_origin + arr_embed) / 2.0
+        #     fused_arr = (arr_origin + arr_embed * 0.3)
+        #
+        #     # 保存结果到 fused_train 文件夹下，文件名保持一致
+        #     fused_file = os.path.join(fused_dir, file_name)
+        #     np.save(fused_file, fused_arr)
+        #
+        #     print(f"已处理并保存: {file_name}")
 
         # # 定义文件夹路径
         origin_dir = '/home/yunchuan/HR-Pro/dataset/THUMOS14/features/origin_test'
         embed_dir = '/home/yunchuan/HR-Pro/dataset/THUMOS14/features/embed_test'
         fused_dir = '/home/yunchuan/HR-Pro/dataset/THUMOS14/features/fused_test'
-        #
-        # # 如果 fused_train 文件夹不存在，则创建
-        # if not os.path.exists(fused_dir):
-        #     os.makedirs(fused_dir)
-        #
-        # # 遍历 origin_train 文件夹下的所有文件（假设均为 .npy 文件）
-        # for file_name in os.listdir(origin_dir):
-        #     # 构造完整的文件路径
-        #     origin_file = os.path.join(origin_dir, file_name)
-        #     embed_file = os.path.join(embed_dir, file_name)
-        #
-        #     # 检查 embed_train 文件夹中是否存在对应的文件
-        #     if not os.path.exists(embed_file):
-        #         print(f"Warning: {embed_file} 文件不存在，跳过。")
-        #         continue
-        #
-        #     # 加载两个数组
-        #     arr_origin = np.load(origin_file)
-        #     arr_embed = np.load(embed_file)
-        #
-        #     # 检查两个数组维度是否一致
-        #     if arr_origin.shape[0] != arr_embed.shape[0]:
-        #         print(f"Warning: 文件 {file_name} 两个数组在第一个维度上的长度不一致，跳过。")
-        #         continue
-        #
-        #     # 在第二个维度上拼接数组，得到形状 (T, 2D)
-        #     fused_arr = np.concatenate([arr_origin, arr_embed], axis=1)
-        #
-        #     # 保存拼接后的数组到 fused_train 文件夹下，文件名保持一致
-        #     fused_file = os.path.join(fused_dir, file_name)
-        #     np.save(fused_file, fused_arr)
-        #
-        #     print(f"已处理并保存: {file_name}")
 
         # 如果 fused_train 文件夹不存在，则创建
         if not os.path.exists(fused_dir):
@@ -166,6 +133,7 @@ def main(args):
 
         # 遍历 origin_train 文件夹下的所有文件（假设均为 .npy 文件）
         for file_name in os.listdir(origin_dir):
+            # 构造完整的文件路径
             origin_file = os.path.join(origin_dir, file_name)
             embed_file = os.path.join(embed_dir, file_name)
 
@@ -178,20 +146,52 @@ def main(args):
             arr_origin = np.load(origin_file)
             arr_embed = np.load(embed_file)
 
-            # 检查两个数组是否形状一致
-            if arr_origin.shape != arr_embed.shape:
-                print(f"Warning: 文件 {file_name} 的两个数组形状不同，跳过。")
+            # 检查两个数组维度是否一致
+            if arr_origin.shape[0] != arr_embed.shape[0]:
+                print(f"Warning: 文件 {file_name} 两个数组在第一个维度上的长度不一致，跳过。")
                 continue
 
-            # 计算元素级平均值，结果形状依然为 (T, D)
-            # fused_arr = (arr_origin + arr_embed) / 2.0
-            fused_arr = (arr_origin + arr_embed * 0.1)
+            # 在第二个维度上拼接数组，得到形状 (T, 2D)
+            fused_arr = np.concatenate([arr_origin, arr_embed], axis=1)
 
-            # 保存结果到 fused_train 文件夹下，文件名保持一致
+            # 保存拼接后的数组到 fused_train 文件夹下，文件名保持一致
             fused_file = os.path.join(fused_dir, file_name)
             np.save(fused_file, fused_arr)
 
             print(f"已处理并保存: {file_name}")
+
+        # # 如果 fused_train 文件夹不存在，则创建
+        # if not os.path.exists(fused_dir):
+        #     os.makedirs(fused_dir)
+        #
+        # # 遍历 origin_train 文件夹下的所有文件（假设均为 .npy 文件）
+        # for file_name in os.listdir(origin_dir):
+        #     origin_file = os.path.join(origin_dir, file_name)
+        #     embed_file = os.path.join(embed_dir, file_name)
+        #
+        #     # 检查 embed_train 文件夹中是否存在对应的文件
+        #     if not os.path.exists(embed_file):
+        #         print(f"Warning: {embed_file} 文件不存在，跳过。")
+        #         continue
+        #
+        #     # 加载两个数组
+        #     arr_origin = np.load(origin_file)
+        #     arr_embed = np.load(embed_file)
+        #
+        #     # 检查两个数组是否形状一致
+        #     if arr_origin.shape != arr_embed.shape:
+        #         print(f"Warning: 文件 {file_name} 的两个数组形状不同，跳过。")
+        #         continue
+        #
+        #     # 计算元素级平均值，结果形状依然为 (T, D)
+        #     # fused_arr = (arr_origin + arr_embed) / 2.0
+        #     fused_arr = (arr_origin + arr_embed * 0.3)
+        #
+        #     # 保存结果到 fused_train 文件夹下，文件名保持一致
+        #     fused_file = os.path.join(fused_dir, file_name)
+        #     np.save(fused_file, fused_arr)
+        #
+        #     print(f"已处理并保存: {file_name}")
 
 
 

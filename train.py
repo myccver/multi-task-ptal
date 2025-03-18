@@ -18,6 +18,11 @@ def S_train(step, args, net, loader_iter, optimizer, logger):
         # outputs = net(data, vid_label)
         outputs = net(data, vid_label, point_label)
         cost, loss_dict = net.criterion(args, outputs, vid_label, point_label)
+        #
+        # if args.mtl and args.mtl_task=='full':
+        #     print('loss_predict:{}'.format(loss_dict['loss_predict']))
+        #     print('loss_sequence_order:{}'.format(loss_dict['loss_sequence_order']))
+        #     print('loss_reconstructions:{}'.format(loss_dict['loss_reconstructions']))
 
         total_cost.append(cost)
         if not torch.isnan(cost):

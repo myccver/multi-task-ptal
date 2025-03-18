@@ -31,10 +31,7 @@ def main(args):
     # --------------------------------------------------Snippet-level Optimization-------------------------------------------------------#
     if args.stage == 1:
         model = S_Model(args)
-        # #
-        # if args.mtl and args.mtl_task == 'pred':
-        #     model.load_state_dict(torch.load(os.path.join(args.model_previous_s1, "model1_seed_{}.pkl".format(args.seed))), strict=False)
-        # #
+
         model = model.to(args.device)
         train_loader = data.DataLoader(dataset(args, phase="train", sample="random", stage=args.stage),
                                        batch_size=1, shuffle=True, num_workers=args.num_workers)
@@ -61,27 +58,40 @@ def main(args):
                 loss = S_train(step, args, model, loader_iter, optimizer, logger)
                 
                 if step % args.test_iter == 0:
-                    test_mAP,test_acc = S_test(model, args, test_loader, logger, step, test_info)
-                    test_info['loss'].append(loss)
-                    test_info["elapsed"].append(str(datetime.timedelta(seconds = time.time() - start_time)))
-                    test_info["now"].append(str(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-                    if not args.mtl:
-                        if test_mAP > best_mAP:
-                            best_mAP = test_mAP
-                            save_best_record(test_info, log_filepath)
-                            torch.save(model.state_dict(),
-                                       os.path.join(args.model_path_s1, "model1_seed_{}.pkl".format(args.seed)))
+                    # if not args.mtl:
+                    #     test_mAP, test_acc = S_test(model, args, test_loader, logger, step, test_info)
+                    #     test_info['loss'].append(loss)
+                    #     test_info["elapsed"].append(str(datetime.timedelta(seconds=time.time() - start_time)))
+                    #     test_info["now"].append(str(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+                    #     if test_mAP > best_mAP:
+                    #         best_mAP = test_mAP
+                    #         save_best_record(test_info, log_filepath)
+                    #         torch.save(model.state_dict(),
+                    #                    os.path.join(args.model_path_s1, "model1_seed_{}.pkl".format(args.seed)))
+                    #     print("\n Current test_mAP:{:.4f} best_mAP:{:.4f}".format(test_mAP, best_mAP))
+                    #     logger.log_value('acc/best mAP', best_mAP, step)
 
                     if args.mtl:
                         if loss < min_loss:
                             min_loss = loss
-                            save_best_record(test_info, log_filepath)
-                            torch.save(model.state_dict(),
-                                       os.path.join(args.model_path_s1, "model1_seed_{}.pkl".format(args.seed)))
 
+                            # torch.save(model.state_dict(),
+                            #            os.path.join(args.model_path_s1, "model1_seed_{}.pkl".format(args.seed)))
+                            print('mtl loss: {}'.format(loss))
 
+                    test_mAP, test_acc = S_test(model, args, test_loader, logger, step, test_info)
+                    test_info['loss'].append(loss)
+                    test_info["elapsed"].append(str(datetime.timedelta(seconds=time.time() - start_time)))
+                    test_info["now"].append(str(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+                    if test_mAP > best_mAP:
+                        best_mAP = test_mAP
+                        save_best_record(test_info, log_filepath)
+                        torch.save(model.state_dict(),
+                                   os.path.join(args.model_path_s1, "model1_seed_{}.pkl".format(args.seed)))
                     print("\n Current test_mAP:{:.4f} best_mAP:{:.4f}".format(test_mAP, best_mAP))
                     logger.log_value('acc/best mAP', best_mAP, step)
+
+
                     # if test_acc > best_acc:
                     #     best_acc = test_acc
                     #     save_best_record(test_info, log_filepath)

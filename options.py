@@ -101,8 +101,8 @@ def parse_args():
     parser.add_argument('--ckpt_path', type=str, default="./ckpt", help='root folder for saving models,ouputs,logs')
     #
     parser.add_argument("--mtl", help='multi_task_learning', action="store_true")
-    parser.add_argument('--mtl_task', type=str, default=1, help='specific task',
-                        choices=['pred','order'])
+    # parser.add_argument('--mtl_task', type=str, default=1, help='specific task',
+    #                     choices=['pred','order'])
     args = parser.parse_args()
 
     # hyper-params from ymal file
@@ -112,9 +112,9 @@ def parse_args():
         setattr(args, key, value)
 
     #
-    if args.mtl and args.mtl_task=='pred':
+    if args.mtl:
         args.model_previous_s1 = os.path.join(args.ckpt_path, args.dataset, args.task_info, 'stage1', 'models')
-        args.task_info = args.task_info+ '_mtl' + '_{}'.format(args.mtl_task)
+        args.task_info = args.task_info+ '_mtl'
         args.lr = args.lr * 1.0
 
     return init_args(args)
