@@ -302,12 +302,12 @@ class S_Model(nn.Module):
 
         self.args = args
         if self.args.mtl:
-            args.feature_dim = args.feature_dim
+            args.feature_dim = args.feature_dim // 4
             self.frame_predictor = FramePrediction(args.feature_dim)
             self.sequenceorder_predictor = SequenceOrderPrediction(args.feature_dim)
             # self.frame_autoencoder = FrameAutoencoder(args.feature_dim, latent_dim=args.feature_dim)
             self.shuffle_predictor = SequenceShufflePrediction(args.feature_dim)
-            self.adapter = nn.Sequential(nn.Linear(args.feature_dim , args.feature_dim),
+            self.adapter = nn.Sequential(nn.Linear(args.feature_dim * 4, args.feature_dim),
                                          nn.ReLU(),
                                          # nn.Dropout(0.5),
                                          nn.Linear(args.feature_dim, args.feature_dim),
